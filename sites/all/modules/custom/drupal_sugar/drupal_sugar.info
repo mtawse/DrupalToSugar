@@ -1,4 +1,6 @@
 name = Drupal to Sugar
 description = Sends form data from Drupal to Sugar modules
 core = 7.x
+dependencies[] = contact
+configure = admin/settings/sugar
 package = Sugar

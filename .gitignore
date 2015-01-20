@@ -34,3 +34,7 @@ xmlrpc.php
 /profiles
 /scripts
 /themes
+
+# Ignore PhpStorm project files
+.idea/*
+
