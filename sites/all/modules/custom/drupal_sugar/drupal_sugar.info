@@ -1,0 +1,4 @@
+name = Drupal to Sugar
+description = Sends form data from Drupal to Sugar modules
+core = 7.x
+package = Sugar
