@@ -1,5 +1,7 @@
 <?php
 
+module_load_include('php', 'drupal_sugar', 'SugarRestClient');
+
 /**
  * Implements hook_menu()
  *
@@ -28,31 +30,61 @@ function drupal_sugar_menu()
  *
  * Add the Sugar field name option to the form edit
  *
- * @todo Make this a dynamic dropdown from Sugar metadata
- * @todo save data!!
- *
  * @param $form
  * @param $form_state
  * @param $form_id
  */
 function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_state, $form_id)
 {
-    $form['sugar_field'] = array(
+    // prepare the dropdown list of field names
+    $options = array('' => '');
+    // check which (if any) sugar module is used in this webform
+    $results = drupal_sugar_module_fetch($form['nid']['#value']);
+    if (isset($results['sugar_module']) && !empty($results['sugar_module'])) {
+        $module_metatdata = $_SESSION['drupal_sugar_metadata']['modules'][$results['sugar_module']];
+        foreach ($module_metatdata['fields'] as $field_name => $defs) {
+            if (is_array($module_metatdata['fields'][$field_name])) {
+                $options[$field_name] = $field_name;
+            }
+        }
+    }
+
+    ksort($options);
+
+
+    $default_value = '';
+    $node = $form['#node'];
+    $form_key = isset($form['form_key']['#default_value']) ? $form['form_key']['#default_value'] : '';
+
+    if (!empty($form_key)) {
+        $results = drupal_sugar_field_fetch($node->nid, $form_key);
+        $default_value = isset($results['sugar_field']) ? $results['sugar_field'] : '';
+    }
+
+    $form['drupal_sugar'] = array(
         '#type' => 'fieldset',
         //'#access' => user_access('administer comments'),
         '#title' => t('SugarCRM field'),
         '#collapsible' => TRUE,
         '#collapsed' => FALSE,
         //'#group' => 'additional_settings',
-        '#weight' => 100,
+        '#weight' => 50,
     );
 
-    $form['sugar_field']['sugar'] = array(
-        '#type' => 'textfield',
+    $form['drupal_sugar']['sugar_field'] = array(
+        '#type' => 'select',
         '#title' => t('Field Name'),
         '#description' => t("Specifiy the SugarCRM field name.  You can find the field name in SugarCRM using Studio editor."),
+        '#options' => $options,
+        '#default_value' => $default_value,
         '#weight' => -1,
     );
+
+    $var = 5;
+
+    $form['#submit'][] = 'drupal_sugar_set_sugar_field';
+
+   //$form['actions']['submit']['#submit'][] = 'drupal_sugar_set_sugar_field';
 }
 
 /**
@@ -60,35 +92,14 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
  *
  * Add an option to select the Sugar module we wil post the data to
  *
- * @todo save data!!
- *
  * @param $form
  * @param $form_state
  * @param $form_id
  */
 function drupal_sugar_form_webform_node_form_alter(&$form, &$form_state, $form_id)
 {
-    /* Instantiate and authenticate */
-    $sugar = new \Spinegar\Sugar7Wrapper\Rest();
-
-    $sugar_url = variable_get('drupal_sugar_config_url');
-    // trim any trailing slash
-    $sugar_url = rtrim($sugar_url, '/');
-    $sugar_username = variable_get('drupal_sugar_config_username');
-    $sugar_password = variable_get('drupal_sugar_config_username');
-
-
-    $sugar->setUrl($sugar_url . '/rest/v10/')
-        ->setUsername($sugar_username)
-        ->setPassword($sugar_password)
-        ->connect();
-
-    /* Retrieve all records in the Accounts module */
-    $accounts = $sugar->search('Accounts');
-
-    //@todo this call is a bit slow and returns more than I need...
-    $parameters = array('type_filter' => 'modules');
-    $metadata = $sugar->getEndpoint('metadata', $parameters);
+    $sugar = new SugarRestClient();
+    $metadata = $sugar->get_sugar_metadata();
 
     $options = array('' => ''); // start with null option
     if (isset($metadata['modules'])) {
@@ -135,10 +146,15 @@ function drupal_sugar_form_webform_node_form_alter(&$form, &$form_state, $form_i
         '#default_value' => $default_value,
     );
 
-    $form['#submit'][] = 'drupal_sugar_set_sugar_module';
+    $form['actions']['submit']['#submit'][] = 'drupal_sugar_set_sugar_module';
 }
 
-
+/**
+ * Custom submit function to add Sugar module to webform
+ *
+ * @param $form
+ * @param $form_state
+ */
 function drupal_sugar_set_sugar_module($form, &$form_state)
 {
     if ($form['#form_id'] == 'webform_node_form') {
@@ -147,13 +163,13 @@ function drupal_sugar_set_sugar_module($form, &$form_state)
         $values = $form_state['values'];
         $nid = (isset($values['nid']) && $values['nid'] != NULL) ? $values['nid'] : NULL;
         $sugar_module = (isset($values['sugar_module'])) ? $values['sugar_module'] : '';
-        if ($nid != NULL) {  // no node ID so must be insert
 
-            $result = drupal_sugar_module_fetch($nid);
-            if ($result) {  // returm FALSE is nothi g fund
-                $update = TRUE;
-            }
+
+        $result = drupal_sugar_module_fetch($nid);
+        if ($result) { // return FALSE is nothing fund
+            $update = TRUE;
         }
+
 
         // update regardless of sugar_module value
         if ($update) {
@@ -168,10 +184,78 @@ function drupal_sugar_set_sugar_module($form, &$form_state)
 }
 
 /**
+ * Custom submit function to add sugar field to webform componenet
+ *
+ * @todo handle changing form_key values - why is cid no unique??
+ *
+ * @param $form
+ * @param $form_state
+ */
+function drupal_sugar_set_sugar_field($form, &$form_state)
+{
+    $var = 5;
+    if ($form['#form_id'] == 'webform_component_edit_form') {
+        // need to check if this is an insert or update
+        $update = FALSE;
+        $values = $form_state['values'];
+        $nid = (isset($values['nid']) && $values['nid'] != NULL) ? $values['nid'] : NULL;
+        $form_key = $values['form_key'];
+        $sugar_field = (isset($values['drupal_sugar']['sugar_field'])) ? $values['drupal_sugar']['sugar_field'] : '';
+
+
+        $result = drupal_sugar_field_fetch($nid, $form_key);
+        if ($result) { // return FALSE is nothing fund
+            $update = TRUE;
+        }
+
+
+        // update regardless of sugar_module value
+        if ($update) {
+            drupal_sugar_field_update($result['id'], $result['nid'], $form_key, $sugar_field);
+        }
+
+        // only insert if a module is specified
+        if (!$update && !empty($sugar_field)) {
+            drupal_sugar_field_insert($nid, $form_key, $sugar_field);
+        }
+    }
+}
+
+
+function drupal_sugar_webform_component_delete($component)
+{
+    $var = 5;
+    // Delete a record in a 3rd-party module table when a component is deleted.
+//    db_delete('mymodule_table')
+//        ->condition('nid', $component['nid'])
+//        ->condition('cid', $component['cid'])
+//        ->execute();
+}
+
+//function drupal_sugar_form_alter(&$form, &$form_state, $form_id)
+//{
+//    $form['actions']['submit']['#submit'][] = 'drupal_sugar_delete_sugar_module';
+//}
+
+
+function drupal_sugar_delete_sugar_module($form, &$form_state)
+{
+    $var = 5;
+}
+
+
+function drupal_sugar_delete($node)
+{
+    $var = 5;
+    drupal_sugar_module_delete($node->nid);
+    //db_delete('mytable')->condition('nid', $node->nid)->execute();
+}
+
+/**
  * Check if we have an entry for this webform
  *
  * @param int $nid The webform node ID
- * @return bool
+ * @return mixed
  */
 function drupal_sugar_module_fetch($nid)
 {
@@ -195,15 +279,18 @@ function drupal_sugar_module_fetch($nid)
 function drupal_sugar_module_update($id, $nid, $sugar_module)
 {
     $result = db_update('drupal_sugar_modules') // Table name no longer needs {}
-        ->fields(array(
-            'sugar_module' => $sugar_module,
-        ))
+        ->fields(array('sugar_module' => $sugar_module))
         ->condition('id', $id, '=')
         ->condition('nid', $nid, '=')
         ->execute();
 }
 
-
+/**
+ * Insert the sugar module for this webform
+ *
+ * @param int $nid
+ * @param string $sugar_module
+ */
 function drupal_sugar_module_insert($nid, $sugar_module)
 {
     $result = db_insert('drupal_sugar_modules')
@@ -214,3 +301,64 @@ function drupal_sugar_module_insert($nid, $sugar_module)
         ->execute();
 }
 
+
+function drupal_sugar_module_delete($nid)
+{
+    $result = db_delete('drupal_sugar_modules')->condition('nid', $nid)->execute();
+}
+
+
+/**
+ * Check if we have an entry for this webform
+ *
+ * @param int $nid The webform node ID
+ * @param string $form_key The webform component ID
+ * @return mixed
+ */
+function drupal_sugar_field_fetch($nid, $form_key)
+{
+    //$table = 'drupal_sugar_module';
+    $result = db_select('drupal_sugar_fields', 'dsf')
+        ->fields('dsf')
+        ->condition('nid', $nid, '=')
+        ->condition('form_key', $form_key, '=')
+        ->execute()
+        ->fetchAssoc();
+
+    return $result;
+}
+
+/**
+ * Update the Sugar field used on this form component
+ *
+ * @param int $id
+ * @param int $nid
+ * @param string $form_key
+ * @param string $sugar_field
+ */
+function drupal_sugar_field_update($id, $nid, $form_key, $sugar_field)
+{
+    $result = db_update('drupal_sugar_fields') // Table name no longer needs {}
+        ->fields(array('sugar_field' => $sugar_field, 'form_key' => $form_key))
+        ->condition('id', $id, '=')
+        ->condition('nid', $nid, '=')
+        ->execute();
+}
+
+/**
+ * Insert the sugar field for this webform component
+ *
+ * @param int $nid
+ * @param string $form_key
+ * @param string $sugar_field
+ */
+function drupal_sugar_field_insert($nid, $form_key, $sugar_field)
+{
+    $result = db_insert('drupal_sugar_fields')
+        ->fields(array(
+            'nid' => $nid,
+            'form_key' => $form_key,
+            'sugar_field' => $sugar_field,
+        ))
+        ->execute();
+}
