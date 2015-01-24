@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Implements hook_schema()
+ *
+ * Build the schema for the drupal_sugar module
+ *
+ * @return array
+ */
 function drupal_sugar_schema()
 {
     $schema = array();

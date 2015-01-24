@@ -52,12 +52,6 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
         '#title' => t('Field Name'),
         '#description' => t("Specifiy the SugarCRM field name.  You can find the field name in SugarCRM using Studio editor."),
         '#weight' => -1,
-//        '#options' => array(
-//            '' => '',
-//            'Leads' => t('Leads'),
-//            'Contacts' => t('Contacts'),
-//        ),
-//        '#default_value' => variable_get('sugar_module'),
     );
 }
 
@@ -74,44 +68,149 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
  */
 function drupal_sugar_form_webform_node_form_alter(&$form, &$form_state, $form_id)
 {
-//    /* Instantiate and authenticate */
-//    $sugar = new \Spinegar\Sugar7Wrapper\Rest();
-//
-//    $sugar_url = variable_get('drupal_sugar_config_url');
-//    // trim any trailing slash
-//    $sugar_url = rtrim($sugar_url, '/');
-//    $sugar_username = variable_get('drupal_sugar_config_username');
-//    $sugar_password = variable_get('drupal_sugar_config_username');
-//
-//
-//    $sugar->setUrl($sugar_url.'/rest/v10/')
-//        ->setUsername($sugar_username)
-//        ->setPassword($sugar_password)
-//        ->connect();
-//
-//    /* Retrieve all records in the Accounts module */
-//    $accounts = $sugar->search('Accounts');
+    /* Instantiate and authenticate */
+    $sugar = new \Spinegar\Sugar7Wrapper\Rest();
 
-    $form['sugar_module'] = array(
+    $sugar_url = variable_get('drupal_sugar_config_url');
+    // trim any trailing slash
+    $sugar_url = rtrim($sugar_url, '/');
+    $sugar_username = variable_get('drupal_sugar_config_username');
+    $sugar_password = variable_get('drupal_sugar_config_username');
+
+
+    $sugar->setUrl($sugar_url . '/rest/v10/')
+        ->setUsername($sugar_username)
+        ->setPassword($sugar_password)
+        ->connect();
+
+    /* Retrieve all records in the Accounts module */
+    $accounts = $sugar->search('Accounts');
+
+    //@todo this call is a bit slow and returns more than I need...
+    $parameters = array('type_filter' => 'modules');
+    $metadata = $sugar->getEndpoint('metadata', $parameters);
+
+    $options = array('' => ''); // start with null option
+    if (isset($metadata['modules'])) {
+        foreach ($metadata['modules'] as $module_name => $module_metadata) {
+            // @todo get the module label
+            // @todo blacklist modules
+            $options[$module_name] = $module_name;
+        }
+    }
+
+    ksort($options);
+
+    $default_value = '';
+    if (isset($form['nid']['#value']) && $form['nid']['#value'] != NULL) {
+        $result = drupal_sugar_module_fetch($form['nid']['#value']);
+        $default_value = $result['sugar_module'];
+    }
+
+
+//    $parameters = array('module_filter' => 'Accounts');
+//    $module_metadata = $sugar->getEndpoint('metadata', $parameters);
+
+    $form['drupal_sugar'] = array(
         '#type' => 'fieldset',
         //'#access' => user_access('administer comments'),
         '#title' => t('SugarCRM module'),
         '#collapsible' => TRUE,
         '#collapsed' => TRUE,
         '#group' => 'additional_settings',
-        '#weight' => 100,
+        '#weight' => 100, // place it at the end
+        '#attributes' => array(
+            'class' => array('sugar-module-form'),
+        ),
+        '#attached' => array(
+            'js' => array(drupal_get_path('module', 'drupal_sugar') . '/drupal_sugar_module.js'),
+        ),
     );
 
-    $form['sugar_module']['sugar'] = array(
+    $form['drupal_sugar']['sugar_module'] = array(
         '#type' => 'select',
         '#title' => t('Module'),
         '#description' => t("Specifiy the SugarCRM module this data is to be sent to"),
-        '#options' => array(
-            '' => '',
-            'Leads' => t('Leads'),
-            'Contacts' => t('Contacts'),
-        ),
-        '#default_value' => variable_get('sugar_module'),
+        '#options' => $options,
+        '#default_value' => $default_value,
     );
+
+    $form['#submit'][] = 'drupal_sugar_set_sugar_module';
+}
+
+
+function drupal_sugar_set_sugar_module($form, &$form_state)
+{
+    if ($form['#form_id'] == 'webform_node_form') {
+        // need to check if this is an insert or update
+        $update = FALSE;
+        $values = $form_state['values'];
+        $nid = (isset($values['nid']) && $values['nid'] != NULL) ? $values['nid'] : NULL;
+        $sugar_module = (isset($values['sugar_module'])) ? $values['sugar_module'] : '';
+        if ($nid != NULL) {  // no node ID so must be insert
+
+            $result = drupal_sugar_module_fetch($nid);
+            if ($result) {  // returm FALSE is nothi g fund
+                $update = TRUE;
+            }
+        }
+
+        // update regardless of sugar_module value
+        if ($update) {
+            drupal_sugar_module_update($result['id'], $result['nid'], $sugar_module);
+        }
+
+        // only insert if a module is specified
+        if (!$update && !empty($sugar_module)) {
+            drupal_sugar_module_insert($nid, $sugar_module);
+        }
+    }
+}
+
+/**
+ * Check if we have an entry for this webform
+ *
+ * @param int $nid The webform node ID
+ * @return bool
+ */
+function drupal_sugar_module_fetch($nid)
+{
+    //$table = 'drupal_sugar_module';
+    $result = db_select('drupal_sugar_modules', 'dsm')
+        ->fields('dsm')
+        ->condition('nid', $nid, '=')
+        ->execute()
+        ->fetchAssoc();
+
+    return $result;
+}
+
+/**
+ * Update the Sugar module used on this form
+ *
+ * @param int $id
+ * @param int $nid
+ * @param string $sugar_module
+ */
+function drupal_sugar_module_update($id, $nid, $sugar_module)
+{
+    $result = db_update('drupal_sugar_modules') // Table name no longer needs {}
+        ->fields(array(
+            'sugar_module' => $sugar_module,
+        ))
+        ->condition('id', $id, '=')
+        ->condition('nid', $nid, '=')
+        ->execute();
+}
+
+
+function drupal_sugar_module_insert($nid, $sugar_module)
+{
+    $result = db_insert('drupal_sugar_modules')
+        ->fields(array(
+            'nid' => $nid,
+            'sugar_module' => $sugar_module
+        ))
+        ->execute();
 }
 
