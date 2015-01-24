@@ -1,8 +1,7 @@
 name = Drupal to Sugar
 description = Sends form data from Drupal to Sugar modules
 core = 7.x
-;dependencies[] = contact
 dependencies[] = webform
 dependencies[] = composer_manager
-configure = admin/settings/sugar
+configure = admin/config/services/sugar
 package = Sugar

@@ -23,9 +23,20 @@ function drupal_sugar_menu()
 }
 
 
+/**
+ * Implements hook_form_FORM_ID_alter()
+ *
+ * Add the Sugar field name option to the form edit
+ *
+ * @todo Make this a dynamic dropdown from Sugar metadata
+ * @todo save data!!
+ *
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ */
 function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_state, $form_id)
 {
-    $var = 5;
     $form['sugar_field'] = array(
         '#type' => 'fieldset',
         //'#access' => user_access('administer comments'),
@@ -54,6 +65,8 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
  * Implements hook_form_FORM_ID_alter()
  *
  * Add an option to select the Sugar module we wil post the data to
+ *
+ * @todo save data!!
  *
  * @param $form
  * @param $form_state

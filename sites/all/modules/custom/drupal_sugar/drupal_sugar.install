@@ -1,0 +1,66 @@
+<?php
+
+function drupal_sugar_schema()
+{
+    $schema = array();
+
+    // fields table
+    $schema['drupal_sugar_fields'] = array(
+        'description' => 'Sugar Fields table to track which Sugar field corresponds to which Webform component',
+        'fields' => array(
+            'id' => array(
+                'description' => 'Autoincrement primary key',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'nid' => array(
+                'description' => 'The ID of the Node',
+                'type' => 'int',
+                'not null' => TRUE,
+            ),
+            'form_key' => array(
+                'description' => 'The Drupal machine name of the field',
+                'type' => 'varchar',
+                'length' => '128',
+                'not null' => TRUE,
+                'default' => '',
+            ),
+            'sugar_field' => array(
+                'description' => 'The corresponding SugarCRM field name',
+                'type' => 'varchar',
+                'length' => '128',
+                'not null' => FALSE,
+            ),
+        ),
+        'primary key' => array('id'),
+    );
+
+
+    $schema['drupal_sugar_modules'] = array(
+        'description' => 'Sugar Module table to track which Sugar module corresponds to which Webform node',
+        'fields' => array(
+            'id' => array(
+                'description' => 'Autoincrement primary key',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'nid' => array(
+                'description' => 'The ID of the Node',
+                'type' => 'int',
+                'not null' => TRUE,
+            ),
+            'sugar_module' => array(
+                'description' => 'The machine name of the SugarCRM module this webform will send the data to',
+                'type' => 'varchar',
+                'length' => '128',
+                'not null' => FALSE,
+            ),
+        ),
+        'primary key' => array('id'),
+    );
+
+
+    return $schema;
+}
