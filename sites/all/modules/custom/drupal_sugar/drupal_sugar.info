@@ -5,3 +5,5 @@ dependencies[] = webform
 dependencies[] = composer_manager
 configure = admin/config/services/sugar
 package = Sugar
+
+;files[] = drupal_sugar_db_functions.inc

@@ -16,6 +16,7 @@ function drupal_sugar_settings_form($form, &$form_state)
 {
     // load script to test the connection
     drupal_add_js(drupal_get_path('module', 'drupal_sugar') .'/test_connection.js');
+    drupal_add_css(drupal_get_path('module', 'drupal_sugar') .'/test_connection.css');
 
     $form['drupal_sugar_config_url'] = array(
         '#type' => 'textfield',

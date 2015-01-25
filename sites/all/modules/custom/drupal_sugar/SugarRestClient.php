@@ -23,8 +23,7 @@ class SugarRestClient
 
         $this->sugar->setUrl($sugar_url . '/rest/v10/')
             ->setUsername($sugar_username)
-            ->setPassword($sugar_password)
-            ->connect();
+            ->setPassword($sugar_password);
     }
 
 
@@ -39,11 +38,24 @@ class SugarRestClient
      */
     public function get_sugar_metadata()
     {
-        if (!isset($_SESSION['drupal_sugar_metadata']) || empty($_SESSION['drupal_sugar_metadata'])) {
-            $parameters = array('type_filter' => 'modules');
-            $_SESSION['drupal_sugar_metadata'] = $this->sugar->getEndpoint('metadata', $parameters);
-        }
+        $parameters = array('type_filter' => 'modules');
+        $this->sugar->connect();
+        return $this->sugar->getEndpoint('metadata', $parameters);
 
-        return $_SESSION['drupal_sugar_metadata'];
+    }
+
+
+    /**
+     * Create the record to the Sugar system
+     *
+     * @todo add created by?
+     *
+     * @param string $module
+     * @param array $data
+     */
+    public function create($module, $data)
+    {
+        $this->sugar->connect();
+        $this->sugar->create($module, $data);
     }
 }
