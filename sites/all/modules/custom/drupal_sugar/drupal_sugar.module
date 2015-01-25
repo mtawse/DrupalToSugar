@@ -37,6 +37,68 @@ function drupal_sugar_menu()
 }
 
 
+/**
+ * Implements hook_form_FORM_ID_alter()
+ *
+ * Add an option to select the Sugar module we wil post the data to
+ *
+ * @param $form
+ * @param $form_state
+ * @param $form_id
+ */
+function drupal_sugar_form_webform_node_form_alter(&$form, &$form_state, $form_id)
+{
+    if (!isset($_SESSION['drupal_sugar_metadata']) || empty($_SESSION['drupal_sugar_metadata'])) {
+        $sugar = new SugarRestClient();
+        $metadata = $sugar->get_sugar_metadata();
+        $metadata['modules'] = SugarMetadata::filter_module_metadata($metadata['modules']);
+        $_SESSION['drupal_sugar_metadata'] = $metadata;
+    }
+
+    $metadata = $_SESSION['drupal_sugar_metadata'];
+
+    $options = array();
+    foreach ($metadata['modules'] as $module_name => $module_metadata) {
+        // @todo get the module label
+        $options[$module_name] = t('@module_name', array('@module_name' => $module_name));
+    }
+    $options[''] = '';  // add a blank option at the start
+    ksort($options);
+
+    $default_value = '';
+    if (isset($form['nid']['#value']) && $form['nid']['#value'] != NULL) {
+        $result = drupal_sugar_module_fetch($form['nid']['#value']);
+        $default_value = $result['sugar_module'];
+    }
+
+
+    $form['drupal_sugar'] = array(
+        '#type' => 'fieldset',
+        //'#access' => user_access('administer comments'),
+        '#title' => t('SugarCRM module'),
+        '#collapsible' => TRUE,
+        '#collapsed' => TRUE,
+        '#group' => 'additional_settings',
+        '#weight' => 100, // place it at the end
+        '#attributes' => array(
+            'class' => array('sugar-module-form'),
+        ),
+        '#attached' => array(
+            'js' => array(drupal_get_path('module', 'drupal_sugar') . '/drupal_sugar_module.js'),
+        ),
+    );
+
+    $form['drupal_sugar']['sugar_module'] = array(
+        '#type' => 'select',
+        '#title' => t('Module'),
+        '#description' => t("Specifiy the SugarCRM module this data is to be sent to"),
+        '#options' => $options,
+        '#default_value' => $default_value,
+    );
+
+    $form['actions']['submit']['#submit'][] = 'drupal_sugar_set_sugar_module';
+}
+
 
 /**
  * Implements hook_form_FORM_ID_alter()
@@ -62,7 +124,7 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
         $module_metatdata['fields'] = SugarMetadata::filter_field_list($module_metatdata['fields']);
         foreach ($module_metatdata['fields'] as $field_name => $defs) {
             if (is_array($module_metatdata['fields'][$field_name])) {
-                $options[$field_name] = $field_name;
+                $options[$field_name] = t('@field_name', array('@field_name' => $field_name));
             }
         }
     }
@@ -109,66 +171,60 @@ function drupal_sugar_form_webform_component_edit_form_alter(&$form, &$form_stat
     }
 }
 
+
 /**
  * Implements hook_form_FORM_ID_alter()
  *
- * Add an option to select the Sugar module we wil post the data to
+ * Adds "Send to Sugar" setting
  *
  * @param $form
  * @param $form_state
  * @param $form_id
  */
-function drupal_sugar_form_webform_node_form_alter(&$form, &$form_state, $form_id)
+function drupal_sugar_form_webform_configure_form_alter(&$form, &$form_state, $form_id)
 {
-    if (!isset($_SESSION['drupal_sugar_metadata']) || empty($_SESSION['drupal_sugar_metadata'])) {
-        $sugar = new SugarRestClient();
-        $metadata = $sugar->get_sugar_metadata();
-        $metadata['modules'] = SugarMetadata::filter_module_metadata($metadata['modules']);
-        $_SESSION['drupal_sugar_metadata'] = $metadata;
+    // We only need the fields if a Sugar module has been specified
+    $sugar_enabled = FALSE;
+
+    // check if any sugar module is used in this webform
+    $results = drupal_sugar_module_fetch($form['nid']['#value']);
+    if (isset($results['sugar_module']) && !empty($results['sugar_module'])) {
+        $sugar_enabled = TRUE;
     }
 
-    $metadata = $_SESSION['drupal_sugar_metadata'];
-
-    $options = array();
-    foreach ($metadata['modules'] as $module_name => $module_metadata) {
-        // @todo get the module label
-        $options[$module_name] = $module_name;
-    }
-    $options[''] = '';  // add a blank option at the start
-    ksort($options);
-
-    $default_value = '';
-    if (isset($form['nid']['#value']) && $form['nid']['#value'] != NULL) {
-        $result = drupal_sugar_module_fetch($form['nid']['#value']);
-        $default_value = $result['sugar_module'];
+    // fetch the default value
+    $default_value = 0;
+    $result = drupal_sugar_send_submissions_fetch($form['nid']['#value']);
+    if ($result && $result['sugar_submission'] == 1) {
+        $default_value = 1;
     }
 
+    $empty_description = '';
+    if (!$sugar_enabled) {
+        $empty_description = t('No SugarCRM module set for this webform');
+    }
 
     $form['drupal_sugar'] = array(
         '#type' => 'fieldset',
         //'#access' => user_access('administer comments'),
-        '#title' => t('SugarCRM module'),
+        '#title' => t('SugarCRM submission'),
         '#collapsible' => TRUE,
-        '#collapsed' => TRUE,
-        '#group' => 'additional_settings',
-        '#weight' => 100, // place it at the end
-        '#attributes' => array(
-            'class' => array('sugar-module-form'),
-        ),
-        '#attached' => array(
-            'js' => array(drupal_get_path('module', 'drupal_sugar') . '/drupal_sugar_module.js'),
-        ),
+        '#collapsed' => !$sugar_enabled,
+        //'#group' => 'additional_settings',
+        '#description' => $empty_description,
+        '#weight' => 50,
     );
 
-    $form['drupal_sugar']['sugar_module'] = array(
-        '#type' => 'select',
-        '#title' => t('Module'),
-        '#description' => t("Specifiy the SugarCRM module this data is to be sent to"),
-        '#options' => $options,
-        '#default_value' => $default_value,
-    );
+    if ($sugar_enabled) {
+        $form['drupal_sugar']['sugar_submission'] = array(
+            '#type' => 'checkbox',
+            '#title' => t("Send submissions to SugarCRM"),
+            '#default_value' => $default_value,
+            '#weight' => -1,
+        );
 
-    $form['actions']['submit']['#submit'][] = 'drupal_sugar_set_sugar_module';
+        $form['#submit'][] = 'drupal_sugar_set_sugar_submissions';
+    }
 }
 
 /**
@@ -188,7 +244,7 @@ function drupal_sugar_set_sugar_module($form, &$form_state)
 
 
         $result = drupal_sugar_module_fetch($nid);
-        if ($result) { // return FALSE is nothing fund
+        if ($result) { // return FALSE if nothing found
             $update = TRUE;
         }
 
@@ -208,7 +264,7 @@ function drupal_sugar_set_sugar_module($form, &$form_state)
 /**
  * Custom submit function to add sugar field to webform componenet
  *
- * @todo handle changing form_key values - why is cid no unique??
+ * @todo handle changing form_key values - why is cid no unique?? (it's unique to the form!)
  *
  * @param $form
  * @param $form_state
@@ -225,12 +281,12 @@ function drupal_sugar_set_sugar_field($form, &$form_state)
 
 
         $result = drupal_sugar_field_fetch($nid, $form_key);
-        if ($result) { // return FALSE is nothing fund
+        if ($result) { // return FALSE if nothing found
             $update = TRUE;
         }
 
 
-        // update regardless of sugar_module value
+        // update regardless of sugar_field value
         if ($update) {
             drupal_sugar_field_update($result['id'], $result['nid'], $form_key, $sugar_field);
         }
@@ -238,6 +294,35 @@ function drupal_sugar_set_sugar_field($form, &$form_state)
         // only insert if a module is specified
         if (!$update && !empty($sugar_field)) {
             drupal_sugar_field_insert($nid, $form_key, $sugar_field);
+        }
+    }
+}
+
+
+function drupal_sugar_set_sugar_submissions($form, &$form_state)
+{
+    if ($form['#form_id'] == 'webform_configure_form') {
+        // need to check if this is an insert or update
+        $update = FALSE;
+        $values = $form_state['values'];
+        $nid = (isset($values['nid']) && $values['nid'] != NULL) ? $values['nid'] : NULL;
+        $sugar_submission = (isset($values['sugar_submission'])) ? $values['sugar_submission'] : 0;
+
+
+        $result = drupal_sugar_send_submissions_fetch($nid);
+        if ($result) { // return FALSE is nothing fund
+            $update = TRUE;
+        }
+
+
+        // update regardless of sugar_submission value
+        if ($update) {
+            drupal_sugar_send_submissions_update($result['id'], $result['nid'], $sugar_submission);
+        }
+
+        // otherwise insert
+        if (!$update) {
+            drupal_sugar_send_submissions_insert($nid, $sugar_submission);
         }
     }
 }
@@ -253,10 +338,6 @@ function drupal_sugar_webform_component_delete($component)
 //        ->execute();
 }
 
-//function drupal_sugar_form_alter(&$form, &$form_state, $form_id)
-//{
-//    $var = 5;
-//}
 
 /**
  * Implements hook_webform_submission_insert()
@@ -268,38 +349,46 @@ function drupal_sugar_webform_component_delete($component)
  */
 function drupal_sugar_webform_submission_insert($node, $submission)
 {
-    // get the sugar module for this form - if any
-    $results = drupal_sugar_module_fetch($node->nid);
-    if ($results) {
-        $module = $results['sugar_module'];
-        // fetch the sugar fields
-        $form_keys = array();
-        $components = $node->webform['components'];
-        // build a list for form keys
-        foreach ($components as $cid => $component) {
-            $form_keys[] = $component['form_key'];
-        }
-        // get the corresponding sugar fields for these form keys and this node
-        $results = drupal_sugar_fields_fetch($node->nid, $form_keys);
-        if ($results) {
-            // we have sugar module and fields
-            // prepare the data to send to sugar
-            $sugar = new SugarRestClient();
-            $data = array();
-            foreach ($results as $sugar_field) {
-                // confirm the form key
-                $value = '';
-                foreach ($components as $cid => $component) {
-                    if ($component['form_key'] == $sugar_field->form_key) {
-                        // @todo handle mutiple values
-                        $value = $submission->data[$cid][0]; // pretty sure we're using cid as the key here...
-                        break;
-                    }
-                }
-                $data[$sugar_field->sugar_field] = $value;
-            }
+    $send = FALSE;
+    $results = drupal_sugar_send_submissions_fetch($node->nid);
+    if ($results && $results['sugar_submission'] == 1) {
+        $send = TRUE;
+    }
 
-            $sugar->create($module, $data);
+    if ($send) {
+        // get the sugar module for this form - if any
+        $results = drupal_sugar_module_fetch($node->nid);
+        if ($results) {
+            $module = $results['sugar_module'];
+            // fetch the sugar fields
+            $form_keys = array();
+            $components = $node->webform['components'];
+            // build a list for form keys
+            foreach ($components as $cid => $component) {
+                $form_keys[] = $component['form_key'];
+            }
+            // get the corresponding sugar fields for these form keys and this node
+            $results = drupal_sugar_fields_fetch($node->nid, $form_keys);
+            if ($results) {
+                // we have sugar module and fields
+                // prepare the data to send to sugar
+                $sugar = new SugarRestClient();
+                $data = array();
+                foreach ($results as $sugar_field) {
+                    // confirm the form key, or can we pluck iy using cid?
+                    $value = '';
+                    foreach ($components as $cid => $component) {
+                        if ($component['form_key'] == $sugar_field->form_key) {
+                            // @todo handle multiple values
+                            $value = $submission->data[$cid][0]; // pretty sure we're using cid as the key here...
+                            break;
+                        }
+                    }
+                    $data[$sugar_field->sugar_field] = $value;
+                }
+
+                $sugar->create($module, $data);
+            }
         }
     }
 }

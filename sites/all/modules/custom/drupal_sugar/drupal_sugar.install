@@ -11,6 +11,31 @@ function drupal_sugar_schema()
 {
     $schema = array();
 
+    // send submissions table
+    $schema['drupal_sugar_send_submissions'] = array(
+        'description' => 'TODO: please describe this table!',
+        'fields' => array(
+            'id' => array(
+                'description' => 'Autoincrement primary key',
+                'type' => 'serial',
+                'unsigned' => TRUE,
+                'not null' => TRUE,
+            ),
+            'nid' => array(
+                'description' => 'The ID of the Node',
+                'type' => 'int',
+                'not null' => TRUE,
+            ),
+            'sugar_submission' => array(
+                'description' => 'Send these submissions to SugarCRM',
+                'type' => 'int',
+                'size' => 'tiny',
+                'not null' => TRUE,
+            ),
+        ),
+        'primary key' => array('id'),
+    );
+
     // fields table
     $schema['drupal_sugar_fields'] = array(
         'description' => 'Sugar Fields table to track which Sugar field corresponds to which Webform component',

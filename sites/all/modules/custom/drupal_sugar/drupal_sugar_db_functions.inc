@@ -132,3 +132,60 @@ function drupal_sugar_field_insert($nid, $form_key, $sugar_field)
         ))
         ->execute();
 }
+
+
+/**
+ * Fetch whether this webform is enabled for sugar submissions
+ *
+ * @param $nid
+ * @return mixed
+ */
+function drupal_sugar_send_submissions_fetch($nid)
+{
+    //$table = 'drupal_sugar_module';
+    $result = db_select('drupal_sugar_send_submissions', 'dsss')
+        ->fields('dsss')
+        ->condition('nid', $nid, '=')
+        ->execute()
+        ->fetchAssoc();
+
+    return $result;
+}
+
+/**
+ * Update the Sugar submission for this form
+ *
+ * @param int $id
+ * @param int $nid
+ * @param bool $sugar_submission
+ */
+function drupal_sugar_send_submissions_update($id, $nid, $sugar_submission)
+{
+    $result = db_update('drupal_sugar_send_submissions') // Table name no longer needs {}
+        ->fields(array('sugar_submission' => $sugar_submission))
+        ->condition('id', $id, '=')
+        ->condition('nid', $nid, '=')
+        ->execute();
+}
+
+/**
+ * Insert the sugar module for this webform
+ *
+ * @param int $nid
+ * @param bool $sugar_submission
+ */
+function drupal_sugar_send_submissions_insert($nid, $sugar_submission)
+{
+    $result = db_insert('drupal_sugar_send_submissions')
+        ->fields(array(
+            'nid' => $nid,
+            'sugar_submission' => $sugar_submission
+        ))
+        ->execute();
+}
+
+
+function drupal_sugar_send_submissions_delete($nid)
+{
+    $result = db_delete('drupal_sugar_send_submissions')->condition('nid', $nid)->execute();
+}
