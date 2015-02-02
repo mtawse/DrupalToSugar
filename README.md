@@ -4,8 +4,9 @@ Send data from Drupal webforms to SugarCRM modules.
 
 #Drupal Requirements
 
-*[weform](https://www.drupal.org/project/webform)
-*[composer manager](https://www.drupal.org/project/composer_manager)
+[weform](https://www.drupal.org/project/webform)
+
+[composer manager](https://www.drupal.org/project/composer_manager)
 
 #SugarCRM Requirements
 
@@ -25,8 +26,12 @@ Thanks to Sean Pinegar for his [Sugar ReST API Wrapper](https://github.com/spine
 
 #Todo
 
-*Enable encryption for Sugar credentials
-*Pull in language strings for module and field names
-*Validatin for enum type fields
-*Test with multiselects
-*Enable related modules and links
+Enable encryption for Sugar credentials
+
+Pull in language strings for module and field names
+
+Validation for enum-type fields
+
+Test with multiselects
+
+Enable related modules and links
